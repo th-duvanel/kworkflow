@@ -268,6 +268,48 @@ function get_tag_name()
   return 0
 }
 
+# TODO:
+# - unit test
+
+# This function fetches the last pomodoro session from the database, if
+# there is one, and sets the options values accordingly.
+#
+# Return:
+# If there is a last pomodoro session, returns 0, and else
+# if there isn't a last pomodoro session, returns 22 (EINVAL).
+function fetch_last_pomodoro_session()
+{
+  local last_pomodoro_session
+  local duration_in_secs
+  local tag_name
+  local description
+
+  last_pomodoro_session=$(select_from 'pomodoro_report' '"duration","tag_name","description"' '' '' 'date,time desc LIMIT 1')
+  if [[ -z "$last_pomodoro_session" ]]; then
+    return 22 # EINVAL
+  fi
+
+  duration_in_secs=$(cut --delimiter='|' --fields=1 <<< "$last_pomodoro_session")
+  is_valid_time "${duration_in_secs}s" || return "$?"
+  tag_name=$(cut --delimiter='|' --fields=2 <<< "$last_pomodoro_session")
+  is_valid_argument "$tag_name" 'tag' || return "$?"
+  description=$(cut --delimiter='|' --fields=3 <<< "$last_pomodoro_session")
+  is_valid_argument "$description" 'description' || return "$?"
+
+  options_values['TIMER']="${duration_in_secs}s"
+  options_values['TAG']=$(cut --delimiter='|' --fields=2 <<< "$last_pomodoro_session")
+  options_values['DESCRIPTION']=$(cut --delimiter='|' --fields=3 <<< "$last_pomodoro_session")
+
+  say 'Last pomodoro session:'
+  say "- Duration: ${options_values['TIMER']}"
+  if [[ -n ${options_values['TAG']} ]]; then
+    say "- Tag: ${options_values['TAG']}"
+  fi
+  if [[ -n ${options_values['DESCRIPTION']} ]]; then
+    say "- Description: ${options_values['DESCRIPTION']}"
+  fi
+}
+
 # This function format text to be used for a tag or description.
 #
 # @text: Text to be formatted
@@ -305,8 +347,10 @@ function format_text()
 
 function parse_pomodoro()
 {
-  local long_options='set-timer:,check-timer,show-tags,tag:,description:,help,verbose'
-  local short_options='t:,c,s,g:,d:,h'
+  # TODO:
+  # - probably also add a test case for the new options on the parser tests
+  local long_options='set-timer:,check-timer,show-tags,tag:,description:,repeat,help,verbose'
+  local short_options='t:,c,s,g:,d:,r,h'
   local options
 
   options="$(kw_parse "$short_options" "$long_options" "$@")"
@@ -365,6 +409,17 @@ function parse_pomodoro()
         options_values['DESCRIPTION']=$(format_text "$2" 'description')
         shift 2
         ;;
+      --repeat | -r)
+        fetch_last_pomodoro_session
+        if [[ $? -gt 0 ]]; then
+          options_values['ERROR']='No previous pomodoro session found'
+          return 22 # EINVAL
+        fi
+        if [[ $(ask_yN 'Would you like to repeat this session?') =~ '0' ]]; then
+          exit
+        fi
+        shift
+        ;;
       --verbose)
         options_values['VERBOSE']=1
         shift
@@ -393,6 +448,7 @@ function pomodoro_help()
     '  pomodoro (-s|--show-tags) - Show registered tags' \
     '  pomodoro (-t|--set-timer) <time>(h|m|s) (-g|--tag) <tag> - Set timer with tag' \
     '  pomodoro (-t|--set-timer) <time>(h|m|s) (-g|--tag) <tag> (-d|--description) <desc> - Set timer with tag and description' \
+    '  pomodoro (-r|--repeat) - Repeat last pomodoro session' \
     '  pomodoro (--verbose) - Show a detailed output'
 }
 

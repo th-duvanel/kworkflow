@@ -117,6 +117,13 @@ function test_parse_pomodoro()
 {
   local output
 
+  parse_pomodoro '--repeat'
+  assert_equals_helper 'No last session to repeat' "$LINENO" "${option_values['TIMER']}" ''
+
+  output='No previous pomodoro session found'
+  parse_pomodoro '-r'
+  assert_equals_helper 'No last session to repeat' "$LINENO" "${option_values['ERROR']}" "$output"
+
   parse_pomodoro '-t' '10m'
   assert_equals_helper 'Time parser failed (minutes)' "$LINENO" "${options_values['TIMER']}" '10m'
 
@@ -378,6 +385,11 @@ function test_show_tags()
   expected+='4   AAAAAAA'$'\n'
   expected+='5   1111111'
   assert_equals_helper 'Wrong output' "$LINENO" "$expected" "$output"
+}
+
+function test_fetch_last_pomodoro_session()
+{
+  
 }
 
 invoke_shunit
