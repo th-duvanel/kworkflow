@@ -268,15 +268,12 @@ function get_tag_name()
   return 0
 }
 
-# TODO:
-# - unit test
-
 # This function fetches the last pomodoro session from the database, if
 # there is one, and sets the options values accordingly.
 #
 # Return:
-# If there is a last pomodoro session, returns 0, and else
-# if there isn't a last pomodoro session, returns 22 (EINVAL).
+# If there is a last pomodoro session, returns 0. If there isn't a last pomodoro 
+# session or any of the last session arguments are invalid, returns 22 (EINVAL).
 function fetch_last_pomodoro_session()
 {
   local last_pomodoro_session
@@ -284,8 +281,9 @@ function fetch_last_pomodoro_session()
   local tag_name
   local description
 
-  last_pomodoro_session=$(select_from 'pomodoro_report' '"duration","tag_name","description"' '' '' 'date,time desc LIMIT 1')
+  last_pomodoro_session=$(select_from 'pomodoro_report' '"duration","tag_name","description"' '' '' 'date DESC, time DESC LIMIT 1')
   if [[ -z "$last_pomodoro_session" ]]; then
+    options_values['ERROR']='No previous pomodoro session found'
     return 22 # EINVAL
   fi
 
@@ -347,8 +345,6 @@ function format_text()
 
 function parse_pomodoro()
 {
-  # TODO:
-  # - probably also add a test case for the new options on the parser tests
   local long_options='set-timer:,check-timer,show-tags,tag:,description:,repeat,help,verbose'
   local short_options='t:,c,s,g:,d:,r,h'
   local options
@@ -410,11 +406,7 @@ function parse_pomodoro()
         shift 2
         ;;
       --repeat | -r)
-        fetch_last_pomodoro_session
-        if [[ $? -gt 0 ]]; then
-          options_values['ERROR']='No previous pomodoro session found'
-          return 22 # EINVAL
-        fi
+        fetch_last_pomodoro_session || return "$?"
         if [[ $(ask_yN 'Would you like to repeat this session?') =~ '0' ]]; then
           exit
         fi
